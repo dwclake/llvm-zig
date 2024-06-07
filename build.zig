@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const macos_llvm_path = std.Build.LazyPath {
+    .cwd_relative = "/usr/local/opt/llvm/lib"
+};
+
 pub fn build(b: *std.Build) !void {
     const target_query: std.Target.Query = .{};
     const target = b.resolveTargetQuery(target_query);
@@ -7,7 +11,7 @@ pub fn build(b: *std.Build) !void {
 
     const lib = b.addStaticLibrary(.{
         .name = "llvm", 
-        .root_source_file = .{.path = "src/llvm-zig.zig"},
+        .root_source_file = b.path("src/llvm.zig"),
         .target = target,
         .optimize = optimize
     });
@@ -21,10 +25,10 @@ pub fn build(b: *std.Build) !void {
     switch (target.result.os.tag) {
         .linux => lib.linkSystemLibrary("LLVM-17"), // Ubuntu
         .macos => {
-            lib.addLibraryPath(.{ .path = "/usr/local/opt/llvm/lib" });
+            lib.addLibraryPath(macos_llvm_path);
             lib.linkSystemLibrary("LLVM");
         },
-        else => lib.linkSystemLibrary("LLVM"),
+        else => lib.linkSystemLibrary("LLVM")
     }
 
     b.installArtifact(lib);
@@ -32,9 +36,7 @@ pub fn build(b: *std.Build) !void {
     _ = try b.modules.put("llvm", &lib.root_module);
 
     _ = b.addModule("clang", .{
-        .root_source_file = .{
-            .path = "src/clang.zig",
-        },
+        .root_source_file = b.path("src/clang.zig")
     });
 
     const examples = b.option(bool, "Examples", "Build all examples [default: false]") orelse false;
@@ -57,9 +59,9 @@ pub fn build(b: *std.Build) !void {
 fn buildExample(b: *std.Build, target: std.Build.ResolvedTarget, i: BuildInfo) void {
     const exe = b.addExecutable(.{
         .name = i.filename(),
-        .root_source_file = .{ .path = i.filepath },
+        .root_source_file = b.path(i.filepath),
         .target = target,
-        .optimize = i.optimize,
+        .optimize = i.optimize
     });
     exe.root_module.addImport("llvm", b.modules.get("llvm").?);
 
@@ -90,24 +92,25 @@ const BuildInfo = struct {
 
 fn buildTests(b: *std.Build, target: std.Build.ResolvedTarget) void {
     const llvm_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/llvm-zig.zig" },
+        .root_source_file = b.path("src/llvm-zig.zig"),
         .target = target,
         .optimize = .Debug,
-        .name = "llvm-tests",
+        .name = "llvm-tests"
     });
     const clang_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/clang.zig" },
+        .root_source_file = b.path("src/clang.zig"),
         .target = target,
         .optimize = .Debug,
-        .name = "clang-tests",
+        .name = "clang-tests"
     });
     switch (target.result.os.tag) {
         .linux => clang_tests.linkSystemLibrary("clang-17"), // Ubuntu
         .macos => {
-            clang_tests.addLibraryPath(.{ .path = "/usr/local/opt/llvm/lib" });
+
+            clang_tests.addLibraryPath(macos_llvm_path);
             clang_tests.linkSystemLibrary("clang");
         },
-        else => clang_tests.linkSystemLibrary("clang"),
+        else => clang_tests.linkSystemLibrary("clang")
     }
     clang_tests.linkLibC();
 
